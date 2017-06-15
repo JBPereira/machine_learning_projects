@@ -45,8 +45,6 @@ outliers_ = []
 for t in range(window_size, len(sorted_size)):
     alarm = detect_unit.detect_spike(sorted_size[0:t+1])
     outliers_.append(alarm)
-    if t == 86:
-        pass
 
 ax2 = plt.subplot(212)
 
