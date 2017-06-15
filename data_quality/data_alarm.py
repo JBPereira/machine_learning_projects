@@ -92,7 +92,7 @@ class DetectorUnit():
                 alarm = 0
                 self.hold_state = False
             else:
-                alarm = 1
+                alarm = 1 if self.stats_unit.predict(fft_diff) == -1 else 0
 
         # Refresh the memory of the unit
         if alarm:
