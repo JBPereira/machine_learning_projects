@@ -56,3 +56,67 @@ ax2.plot(np.array(range(window_size, len(sorted_size))), outliers_, 'r', label='
 # ax2.xlabel('Days')
 plt.legend(loc='lower left', bbox_to_anchor=(0.5, 1))
 plt.show()
+
+## Test variation over time  of the data
+
+
+
+## Test Normality of the data
+
+def EvalCdf(sample, x):
+    count = 0.0
+    for value in sample:
+        if value <= x:
+            count += 1
+    prob = count / np.shape(sample)[0]
+    return prob
+
+normal = np.random.normal(np.mean(sorted_size), np.std(sorted_size), np.shape(sorted_size)[0])
+bin_step = (max(sorted_size) - min(sorted_size))/(float(np.shape(sorted_size)[0]*0.1))
+bins = np.arange(min(sorted_size) + bin_step, max(sorted_size)+bin_step, bin_step)
+cdf = np.zeros(np.shape(bins))
+cdf_normal = np.zeros(np.shape(bins))
+for bin in range(len(bins)):
+    cdf[bin] = EvalCdf(sorted_size, bins[bin])
+    cdf_normal[bin] = EvalCdf(normal, bins[bin])
+
+plt.figure()
+plt.plot(bins, cdf)
+plt.plot(bins, cdf_normal)
+
+## Plot signal descriptive statistics over time
+
+time_steps = np.arange(0, len(sorted_size), 10)
+variation_over_time = np.zeros(np.shape(time_steps)[0])
+variation_since_start = np.zeros(np.shape(time_steps)[0])
+variation_over_time[0] = np.std(sorted_size[0:time_steps[1]])
+variation_since_start[0] = variation_over_time[0]
+mean_over_time = np.zeros(np.shape(time_steps)[0])
+mean_since_start = np.zeros(np.shape(time_steps)[0])
+mean_over_time[0] = np.std(sorted_size[0:time_steps[1]])
+mean_since_start[0] = mean_over_time[0]
+for bin in range(1, np.shape(time_steps)[0]):
+    variation_over_time[bin] = np.std(sorted_size[time_steps[bin-1]:time_steps[bin]])
+    variation_since_start[bin] = np.std(sorted_size[0 : time_steps[bin]])
+    mean_over_time[bin] = np.mean(sorted_size[time_steps[bin-1]:time_steps[bin]])
+    mean_since_start[bin] = np.mean(sorted_size[0 : time_steps[bin]])
+
+diffs = np.zeros(len(sorted_size)-1)
+log_diffs = np.zeros(len(sorted_size)-1)
+
+for t in range(len(diffs)):
+    diffs[t] = sorted_size[t+1] - sorted_size[t]
+    log_diffs[t] = np.log(diffs[t])
+plt.close('all')
+plt.figure()
+ax1 = plt.subplot(311)
+ax1.plot(time_steps , variation_over_time)
+ax1.plot(time_steps, [np.std(sorted_size)] * len(time_steps), '--r')
+ax1.plot(time_steps, variation_since_start, 'og')
+ax2 = plt.subplot(312)
+ax2.plot(time_steps , mean_over_time)
+ax2.plot(time_steps, [np.mean(sorted_size)] * len(time_steps), '--r')
+ax2.plot(time_steps, mean_since_start, 'og')
+ax3 = plt.subplot(313)
+ax3.plot(diffs)
+ax3.plot(log_diffs, '--r')
