@@ -1,5 +1,4 @@
-The prioritisation algorithm is a Deep Learning based recommender system that suggests the most relevant
-line items in a campaign based on users' input.
+The prioritisation algorithm is a Deep Learning based recommender system that suggests the most relevant line items in a campaign based on users' input.
 
 In the folder 'users_questionnaire' is the data from the users' questionnaires which can be used to train the algorithm.
 It is recommended to use a combination of the training_set + user_data to increase the training set size.
