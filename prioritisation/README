@@ -1,0 +1,17 @@
+The prioritisation algorithm is a Deep Learning based recommender system that suggests the most relevant
+line items in a campaign based on users' input.
+
+In the folder 'users_questionnaire' is the data from the users' questionnaires which can be used to train the algorithm.
+It is recommended to use a combination of the training_set + user_data to increase the training set size.
+
+To train or test the algorithm, check the example in the class.
+
+In this package it is also included functions to covert mined json line item data into csv which is usable by the algorithm.
+This is the 'dataextractor.py' file. To get the json line item data, go to BaaS media specialist, inspect and copy the
+json response.
+
+If you wish to sample the data, you can use the 'data_sampling.py' file which takes a representative sample of the data,
+capturing as much variation as possible.
+
+The 'prioritize_unlabeled_data.py' file uses the prioritisation algorithm to rank data scrapped from BaaS.
+

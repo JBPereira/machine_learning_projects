@@ -1,6 +1,4 @@
-import os
 import random
-from tempfile import TemporaryFile
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,64 +6,14 @@ from keras.callbacks import EarlyStopping
 from keras.layers import Activation, Dense, Dropout, advanced_activations
 from keras.layers.noise import GaussianNoise
 from keras.models import Sequential, load_model
-from keras.wrappers.scikit_learn import  KerasClassifier
-from sklearn.ensemble import AdaBoostClassifier
 from sklearn.model_selection import KFold
 
 from data_normalizer import DataNormalizer
-from users_questionnaire.abigail import ab_regular_json_data
 from users_questionnaire.training_set import trainingset
 
 
-def build_model(activation='relu'):
-    model = Sequential()
-
-    layers = np.ones(5 * 2) * 100
-
-    depth = len(layers)
-
-    for i in range(depth):
-
-        if i is 0:
-            # Input Layer of the Model
-            # act = advanced_activations.PReLU(alpha_initializer='zeros')
-            # act2 = advanced_activations.ThresholdedReLU(theta=-100)
-            act = advanced_activations.ELU(alpha=0.8)
-            # model.add(Dense(int(layers[i]), input_shape=(2 * nfeatures,), kernel_initializer='uniform'))
-
-            model.add(Dense(int(layers[i]), input_shape=(2 * 5,)))
-
-            # model.add(act2)
-
-            model.add(act)
-        else:
-            # Hidden Layers
-            model.add(Dense(int(layers[i]), activation=activation))
-            model.add(Dropout(.2))
-            model.add(act)
-            model.add(Activation("tanh"))
-            # Output Layer
-    model.add(Dense(1, activation='linear'))
-    model.compile(loss='mse', optimizer='adam', metrics=["accuracy"])
-
-    return model
-
-
-class SciKeras(KerasClassifier):
-
-    def fit(self, x, y, sample_weight, **kwargs):
-        y = np.array(y)
-        if len(y.shape) != 1:
-            self.classes_ = np.arange(y.shape[1])
-        else:
-            self.classes_ = np.unique(y)
-            y = np.searchsorted(self.classes_, y)
-        self.n_classes_ = len(self.classes_)
-        return super(KerasClassifier, self).fit(x, y, sample_weight=sample_weight, **kwargs)
-
-
 class DeepLearner:
-    def __init__(self, ensemble_number=1, params=None, method=None, layers=None):
+    def __init__(self, params=None, method=None, layers=None):
 
         self.layers = layers
         if params is not None:
@@ -111,16 +59,7 @@ class DeepLearner:
         model.add(Dense(1, activation='linear'))
         model.compile(loss='mse', optimizer='adam', metrics=["accuracy"])
 
-        return model
-
-    def boost_model_config(self, epochs=200, batch_size=10, n_estimators=15):
-
-        sk_params = {'epochs': epochs, 'batch_size': batch_size, 'verbose':2}
-        wrapper = SciKeras(build_fn=build_model, **sk_params)
-
-        adaboost = AdaBoostClassifier(base_estimator=wrapper, n_estimators=n_estimators)
-
-        self.model = adaboost
+        self.model = model
 
     def train(self, training_data, training_class, activation='relu', batch_size=10, n_epoch=250,
               filename=False, pairwise=False,
@@ -141,18 +80,16 @@ class DeepLearner:
         if double_ordering:
             pairwise_data = np.vstack([pairwise_data, pairwise_data[:, range(nfeatures, nfeatures*2) + range(0, nfeatures)]])
             pairwise_class = np.hstack([pairwise_class, 1-pairwise_class])
-        self.model = self.build_model(nfeatures=nfeatures, activation=activation)
+        self.build_model(nfeatures=nfeatures, activation=activation)
         self.model.fit(pairwise_data, pairwise_class, epochs=n_epoch, batch_size=batch_size, verbose=verbose)
 
         if filename:
             self.model.save('{} {}'.format(filename, i))
 
     def test_train(self, training_data, training_class, batch_size=10, n_epoch=200,
-                   real_training_set=None, n_estimators=15):
+                   real_training_set=None):
 
         nfeatures = len(training_data[0][0])
-
-        self.boost_model_config(epochs=n_epoch, batch_size=batch_size, n_estimators=n_estimators)
 
         pairwise_data, pairwise_class = self.prepare_training_data(training_data, training_class)
 
@@ -186,11 +123,14 @@ class DeepLearner:
         accuracy_array = np.zeros(n_cross_pieces)
 
         for i in range(n_cross_pieces):
+
             ### Fit model to training data
             self.shuffle_weights()
-            self.model.fit(cross_train_data[i], cross_train_class[i])
+            self.model.fit(cross_train_data[i], cross_train_class[i], batch_size=batch_size, epochs=n_epoch)
+
             ### Test accuracy on test data
             accuracy_array[i] = self.test_accuracy(cross_test_data[i], cross_test_class[i])
+
             ## Cycle to output real valued results
             for j in range(len(cross_test_data[i])):
                 predicted = np.round(self.model.predict(np.reshape(cross_test_data[i][j], (1, 10))))
@@ -205,6 +145,7 @@ class DeepLearner:
                     print "Line item {}: Budget = {}, DaysLeft = {}, PacingtoDate = {}, " \
                           "CPA= {}, PacingYesterday = {}, Rank = {} Real Rank = {}".format(*string)
                 print "\n --------------------------------------- \n"
+
         avg_accuracy = sum(accuracy_array) / float(n_cross_pieces)
         print 'Average Accuracy' + str(avg_accuracy)
         return avg_accuracy
@@ -402,34 +343,17 @@ class DeepLearner:
 
 
 if __name__ == "__main__":
-    dn = DataNormalizer(
-        params=['network_budget', 'days_left', 'pacing_to_date', 'cpa_actual', 'pacing_yesterday', 'cpa_target'])
-    #ts, training_class = dn.process_training_set(trainingset, diff_to_target=False)
-    #norm_ts = dn.normalize_training_data(ts, method='z-norm')
 
     NN = DeepLearner()
-    #NN.test_train(norm_ts, training_class, real_training_set=ts)
-    # NN.load_trained_model()
+
     params = ['network_budget', 'days_left', 'pacing_to_date', 'cpa_actual', 'pacing_yesterday', 'cpa_target']
-    NN = DeepLearner(
-        params=params,
-    method='min-max')
-    NN_not_hundred = DeepLearner(
-        params=params,
-        method='min-max')
+    NN = DeepLearner(params=params, method='min-max')
+
     pacing_positions = [params.index('pacing_to_date'), params.index('pacing_yesterday') ]
     cpa_to_target_pos = params.index('cpa_actual')
     ts, training_class = NN.normalizer.process_training_set(trainingset, diff_to_target=False)
 
-
-
-    norm_ts_hundred = NN.normalizer.normalize_training_data(ts, pacing_positions=pacing_positions, method = 'z-norm', CPA_target_pos=False)
-    norm_ts_not_hundred = NN_not_hundred.normalizer.normalize_training_data(ts)
-    # norm_ts_hundred = np.array(norm_ts_hundred)
-    # training_class = np.array(training_class)
-
-    # def plot_performace_diff_params ()
-
+    norm_ts_hundred = NN.normalizer.normalize_training_data(ts, pacing_positions=pacing_positions, method='z-norm', CPA_target_pos=False)
 
     ############### Print Average Performance for various Training Sizes #######
 
@@ -448,7 +372,7 @@ if __name__ == "__main__":
 
             dummy_ts = np.array(norm_ts_hundred)
             dummy_class = np.array(training_class)
-            test_NN = DeepLearner(params=params, method='z-norm', ensemble_number=ensemble_number)
+            test_NN = DeepLearner(params=params, method='z-norm')
             random_points = random.sample(range(len(dummy_ts)), training_size)
             train_data = dummy_ts[random_points]
             test_data = np.delete(dummy_ts, random_points, axis=0)
@@ -481,207 +405,6 @@ if __name__ == "__main__":
     plt.xlabel('training_size')
     plt.show()
 
-    ######## Print Accuracy per number of epochs ###########
-
-    lowest_n_epochs = 80
-    highest_n_epochs = 300
-    best_epoch_accuracy = 0
-    best_n_epochs = 0
-
-    n_epochs = range(lowest_n_epochs, highest_n_epochs, 10)
-    performance_per_n_epochs = np.zeros(np.shape(n_epochs))
-    n_inner_cycles = 7
-
-    for n_epoch in n_epochs:
-
-        avg_accuracy = 0
-        for cycle in range(n_inner_cycles):
-
-            dummy_ts = np.array(norm_ts_hundred)
-            dummy_class = np.array(training_class)
-            test_NN = DeepLearner(params=params, method='min-max')
-            random_points = random.sample(range(len(dummy_ts)), best_training_size)
-            train_data = dummy_ts[random_points]
-            test_data = np.delete(dummy_ts, random_points, axis=0)
-            train_class = dummy_class[random_points]
-            test_class = np.delete(dummy_class, random_points, axis=0)
-
-            test_NN.train(train_data, train_class, batch_size=10, n_epoch=n_epoch)
-            pairwise_test, pairwise_test_class = test_NN.prepare_training_data(test_data, test_class)
-            prediction = np.zeros(np.shape(pairwise_test_class))
-            accuracy = 0
-            for i in range(len(pairwise_test_class)):
-                prediction[i] = np.round(test_NN.model.predict(np.reshape(pairwise_test[i], (1, 10))))
-                if prediction[i] == pairwise_test_class[i]:
-                    accuracy += 1
-            accuracy = (float(accuracy) / len(prediction)) * 100
-            print " \n\n ACCURACY: {}".format(accuracy)
-
-            avg_accuracy += accuracy
-        avg_accuracy = avg_accuracy / float(n_inner_cycles)
-        if avg_accuracy > best_epoch_accuracy:
-            best_epoch_accuracy = avg_accuracy
-            best_n_epochs = n_epoch
-        performance_per_n_epochs[(n_epoch-lowest_n_epochs)/10] = avg_accuracy
-
-    np.save('avg_accuracy_per_n_epochs', performance_per_n_epochs)
-
-    plt.plot(n_epochs, performance_per_n_epochs)
-    plt.ylabel('Average Accuracy Per number of Epochs')
-    plt.ylabel('number of epochs')
-    plt.show()
-
-    ######## Print Accuracy per batch number ###########
-
-    lowest_batch_number = 5
-    highest_batch_number = 30
-    best_batch_accuracy = 0
-    best_n_batches = 0
-
-    n_batches = range(lowest_batch_number, highest_batch_number)
-    performance_per_n_batch = np.zeros(np.shape(n_batches))
-    n_inner_cycles = 30
-
-    for n_batch in n_batches:
-
-        avg_accuracy = 0
-        for cycle in range(n_inner_cycles):
-
-            dummy_ts = np.array(norm_ts_hundred)
-            dummy_class = np.array(training_class)
-            test_NN = DeepLearner(params=params, method='min-max')
-            random_points = random.sample(range(len(dummy_ts)), best_training_size)
-            train_data = dummy_ts[random_points]
-            test_data = np.delete(dummy_ts, random_points, axis=0)
-            train_class = dummy_class[random_points]
-            test_class = np.delete(dummy_class, random_points, axis=0)
-
-            test_NN.train(train_data, train_class, batch_size=n_batch, n_epoch=best_n_epochs)
-            pairwise_test, pairwise_test_class = test_NN.prepare_training_data(test_data, test_class)
-            prediction = np.zeros(np.shape(pairwise_test_class))
-            accuracy = 0
-            for i in range(len(pairwise_test_class)):
-                prediction[i] = np.round(test_NN.model.predict(np.reshape(pairwise_test[i], (1, 10))))
-                if prediction[i] == pairwise_test_class[i]:
-                    accuracy += 1
-            accuracy = (float(accuracy) / len(prediction)) * 100
-            print " \n\n ACCURACY: {}".format(accuracy)
-
-            avg_accuracy += accuracy
-        avg_accuracy = avg_accuracy / float(n_inner_cycles)
-        if avg_accuracy > best_batch_accuracy:
-            best_batch_accuracy = avg_accuracy
-            best_n_batches = n_batch
-        performance_per_n_batch[n_batch - lowest_batch_number] = avg_accuracy
-
-    outfile = TemporaryFile()
-    np.save('avg_accuracy_per_n_batches', performance_per_n_batch)
-
-    plt.plot(n_batches, performance_per_n_batch)
-    plt.ylabel('Average Accuracy')
-    plt.ylabel('number of batches')
-    plt.show()
-
-    ############### Test Network Value Update ##################################
-
-    # n_rand_points = 25
-    # random_points = np.random.choice(range(len(norm_ts_hundred)), n_rand_points)
-    # mock_data = norm_ts_hundred[random_points]
-    # mock_class = training_class[random_points]
-    # test_NN = DeepLearner(params=params, method='min-max')
-    # pairwise_data, pairwise_class = test_NN.prepare_training_data(mock_data, mock_class)
-    # test_NN.train(mock_data, mock_class, batch_size=len(mock_data), n_epoch=250, filename='NN_test.h5')
-    # crooked_positions = np.random.choice(range(len(pairwise_class)), 250)
-    # pairwise_class[crooked_positions] = 1 - pairwise_class[crooked_positions]
-    # start_time = tm.default_timer()
-    # retrained_prediction = test_NN.model.fit(pairwise_data[crooked_positions], pairwise_class[crooked_positions], epochs=400)
-    # elapsed = tm.default_timer() - start_time
-    # print("\n\n ELAPSED TIME FOR RETRAINING : {}".format(elapsed))
-    #
-    # retrained_prediction = np.zeros(np.shape(pairwise_class[crooked_positions]))
-    #
-    # for i in range(len(crooked_positions)):
-    #     retrained_prediction[i] = int(test_NN.model.predict(np.reshape(pairwise_data[crooked_positions[i]], (1, 10))))
-    #
-    # prediction_comparison = (retrained_prediction == pairwise_class[crooked_positions])
-    # number_of_correctly_classified = [1 for i in range(len(prediction_comparison)) if prediction_comparison[i] == True]
-    # accuracy_after_retrain = float(len(number_of_correctly_classified))/len(prediction_comparison)
-    #
-    # print' \n \n \n ACCURACY_AFTER_RETRAIN {} \n \n \n'.format(accuracy_after_retrain)
-
-    ####################################################################
-    avg_accuracy = 0
-    n_cycles = 30
-    for i in range(n_cycles):
-        NN = DeepLearner(
-            params=params,
-            method='min-max')
-        try:
-            avg_accuracy += NN.test_train(norm_ts_hundred, training_class, activation='relu', real_training_set=ts)
-        except Exception as e:
-            print e
-    avg_accuracy = avg_accuracy / float(n_cycles)
-    print "\n\n\n AVERAGE ACCURACY OVER 30 CYCLES: {}\n\n".format(avg_accuracy)
-    # try:
-    #     NN_not_hundred.test_train(norm_ts_not_hundred, training_class, activation='relu', real_training_set=ts)
-    # except:
-    #     pass
-
-    # NN.load_trained_model()
-    #
-    # NN.print_test_results(li_data)
-
-    #
-    # test_example = norm_ts[np.random.random_integers(0, 24)]
-    # pred_rank = NN.rank_items(test_example)
-    #
-    # for i in range(len(pred_rank)):
-    #     print 'pred rank: {}'.format(pred_rank[i])
-    #     print '  rank: {}'.format(training_class[0][i])
-    #     print '\n\n'
-
-    ################ Abigail Training Set Test ########
-
-    params = ['network_budget', 'days_left', 'pacing_yesterday', 'pacing_to_date', 'cpa_actual', 'cpa_target']
-    abigail_NN = DeepLearner(params=params, method='min-max')
-
-    ab_ts, ab_class = abigail_NN.normalizer.process_training_set(ab_regular_json_data, diff_to_target=False)
-    #### separate the spend from normal data #####
-    pacing_positions = [params.index('pacing_to_date'), params.index('pacing_yesterday')]
-    cpa_to_target_pos = params.index('cpa_actual')
-    norm_ab_ts = NN.normalizer.normalize_training_data(ab_ts,
-                                                       pacing_positions=pacing_positions,
-                                                       CPA_target_pos=cpa_to_target_pos)
-
-    ab_class = np.array(ab_class)
-    norm_ab_ts = np.array(norm_ab_ts)
-    #
-    # NN.test_train(norm_ab_ts, ab_class, activation='relu', real_training_set=ab_ts)
-
-    test_ab_NN = DeepLearner(params=params, method='min-max')
-    pairwise_data, pairwise_class = test_ab_NN.prepare_training_data(norm_ab_ts, ab_class)
-    random_points = random.sample(range(len(norm_ab_ts)), 5)
-    train_data = norm_ab_ts[random_points]
-    test_data = np.delete(norm_ab_ts, random_points, axis=0)
-    train_class = ab_class[random_points]
-    test_class = np.delete(ab_class, random_points, axis=0)
-    try:
-        os.remove('NN_test.h5')
-    except OSError:
-        pass
-    test_ab_NN.train(train_data, train_class, batch_size=10, n_epoch=200)
-
-    pairwise_test, pairwise_test_class = test_ab_NN.prepare_training_data(test_data, test_class)
-    prediction = np.zeros(np.shape(pairwise_test_class))
-
-    for i in range(len(test_data)):
-        prediction[i] = np.round(test_ab_NN.model.predict(np.reshape(pairwise_test[i], (1, 10))))
-
-    prediction_comparison = (prediction == pairwise_test_class)
-    number_of_correctly_classified = [1 for i in range(len(prediction_comparison)) if prediction_comparison[i] == True]
-    accuracy_after_retrain = float(len(number_of_correctly_classified))/len(prediction_comparison)
-
-    print' \n \n \n ACCURACY OF ABIGAIL TRAINING SET {} \n \n \n'.format(accuracy_after_retrain)
 
 
 
